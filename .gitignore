@@ -2,3 +2,9 @@ node_modules/
 dist/
 .env
 *.log
+
+# Database and seed files
+database/
+server/seed-employees.js
+server/seed-engineers.js
+server/setup-db.js
