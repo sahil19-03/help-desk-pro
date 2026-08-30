@@ -74,6 +74,22 @@ Open `http://localhost:5173` after both services start.
 - `server/` — Express API
 - `database/` — PostgreSQL database schema
 
+## Vercel Deployment
+
+This project is configured as a monorepo (client + server) and can be deployed directly to Vercel as a single project. The frontend will be served as a static site, and the backend Express API will be deployed as Serverless Functions.
+
+1. Create a new project in your Vercel Dashboard and import this repository.
+2. Ensure the **Framework Preset** is set to `Vite`.
+3. Set the **Root Directory** to the root of the repository (do not change it to `client` or `server`).
+4. In the **Build and Output Settings**:
+   - Build Command: `npm run build`
+   - Output Directory: `client/dist`
+   - Install Command: `npm install`
+5. Add your database environment variables (e.g., `DATABASE_URL`, `JWT_SECRET`) in the Environment Variables section.
+6. Click **Deploy**.
+
+Vercel will build the React frontend and automatically route any requests starting with `/api/` to your Express backend (thanks to the `vercel.json` and code configuration).
+
 ## Product problem
 
 HelpDesk Pro replaces scattered IT requests from email, chat, and informal conversations with a trackable workflow. It gives employees visibility into their request and gives IT managers a clear view of team capacity and unresolved work.

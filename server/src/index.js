@@ -37,7 +37,11 @@ app.use('/api/support-teams', teamsRouter);
 app.use('/api/admin',         adminRouter);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-app.listen(port, () => {
-  console.log(`Help Desk API running at http://localhost:${port}`);
-  console.log(`Database: ${databaseEnabled ? 'PostgreSQL' : 'in-memory demo mode'}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(port, () => {
+    console.log(`Help Desk API running at http://localhost:${port}`);
+    console.log(`Database: ${databaseEnabled ? 'PostgreSQL' : 'in-memory demo mode'}`);
+  });
+}
+
+export default app;
