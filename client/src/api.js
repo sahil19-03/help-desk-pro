@@ -13,7 +13,9 @@
  */
 
 // The server URL. Override with VITE_API_URL in .env if deploying elsewhere.
-export const API = import.meta.env.VITE_API_URL?.trim() || 'http://localhost:4000/api';
+// Defaults to /api (relative) which works in both Vercel (same origin) and
+// local dev (proxied to localhost:4000 by Vite — see vite.config.js).
+export const API = import.meta.env.VITE_API_URL?.trim() || '/api';
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 
