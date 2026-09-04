@@ -14,7 +14,34 @@ import { adminRouter }   from './routes/admin.js';
 const app  = express();
 const port = Number(process.env.PORT ?? 4000);
 
-app.use(cors());
+// ─── CORS ────────────────────────────────────────────────────────────────────
+// Development: allow all origins so local dev works without configuration.
+// Production:  restrict to the CLIENT_URL env var only (e.g. your Vercel domain).
+//              Any other origin will receive a CORS error — this prevents
+//              third-party sites from calling the API with a user's credentials.
+const isProduction = process.env.NODE_ENV === 'production';
+const clientUrl    = process.env.CLIENT_URL?.trim();
+
+app.use(cors(isProduction
+  ? {
+      origin(origin, callback) {
+        // Allow requests with no Origin header (e.g. server-to-server, curl)
+        // and requests from the whitelisted client URL.
+        if (!origin || origin === clientUrl) {
+          callback(null, true);
+        } else {
+          callback(new Error(`CORS: origin '${origin}' is not allowed.`));
+        }
+      },
+      methods:             ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders:      ['Content-Type', 'Authorization'],
+      exposedHeaders:      ['Authorization'],
+      credentials:         true,
+      optionsSuccessStatus: 204,
+    }
+  : {} // development — allow all origins
+));
+
 app.use(express.json());
 
 // ─── Health checks ────────────────────────────────────────────────────────────

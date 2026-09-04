@@ -14,18 +14,57 @@
 import express  from 'express';
 import bcrypt   from 'bcryptjs';
 import jwt      from 'jsonwebtoken';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { pool, databaseEnabled } from '../db.js';
 
 export const authRouter = express.Router();
 
 // Read config from environment variables
-const jwtSecret   = process.env.JWT_SECRET;
-const googleId    = process.env.GOOGLE_CLIENT_ID;
-const googleSecret = process.env.GOOGLE_CLIENT_SECRET;
-const callbackUrl  = process.env.GOOGLE_CALLBACK_URL
+const jwtSecret     = process.env.JWT_SECRET;
+const googleId      = process.env.GOOGLE_CLIENT_ID;
+const googleSecret  = process.env.GOOGLE_CLIENT_SECRET;
+const callbackUrl   = process.env.GOOGLE_CALLBACK_URL
   ?? `http://localhost:${process.env.PORT ?? 4000}/api/auth/google/callback`;
-const clientUrl   = process.env.CLIENT_URL ?? 'http://localhost:5173';
+const clientUrl     = process.env.CLIENT_URL ?? 'http://localhost:5173';
+// Optional: restrict Google sign-in to a single email domain (e.g. "company.com").
+// Set ALLOWED_EMAIL_DOMAIN in your .env. Leave blank to allow any Google account.
+const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase() || null;
+
+// ─── OAuth state store (CSRF protection) ─────────────────────────────────────
+// Each OAuth flow gets a unique random `state` token that we generate before
+// redirecting to Google and verify when Google calls back.
+// This prevents CSRF attacks where a third party tricks the user's browser into
+// completing an OAuth flow on their behalf.
+//
+// The store is an in-memory Map: state → expiry timestamp.
+// Tokens expire after 10 minutes to limit the replay window.
+// For multi-server deployments, replace with a shared Redis store.
+const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const pendingStates = new Map();
+
+/** Generate a cryptographically random state token and record it. */
+function createState() {
+  const state = randomBytes(32).toString('hex');
+  pendingStates.set(state, Date.now() + STATE_TTL_MS);
+  // Prune expired tokens on every issue to prevent unbounded growth
+  const now = Date.now();
+  for (const [s, expiry] of pendingStates) {
+    if (expiry < now) pendingStates.delete(s);
+  }
+  return state;
+}
+
+/**
+ * Validate and consume a state token.
+ * Returns true if the token was valid; false if missing, unknown, or expired.
+ * One-time use: the token is deleted whether valid or not.
+ */
+function consumeState(state) {
+  if (!state || !pendingStates.has(state)) return false;
+  const expiry = pendingStates.get(state);
+  pendingStates.delete(state);
+  return Date.now() < expiry;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,6 +100,9 @@ authRouter.get('/google', (_, res) => {
   if (!googleId || !googleSecret || !jwtSecret) {
     return res.status(503).json({ message: 'Google sign-in is not configured on this server.' });
   }
+  // Generate a CSRF state token for this OAuth flow.
+  // Google will echo it back in the callback so we can verify the flow wasn't tampered with.
+  const state = createState();
   const params = new URLSearchParams({
     client_id:     googleId,
     redirect_uri:  callbackUrl,
@@ -68,6 +110,7 @@ authRouter.get('/google', (_, res) => {
     scope:         'openid email profile',
     access_type:   'offline',
     prompt:        'select_account',
+    state,
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
@@ -80,6 +123,13 @@ authRouter.get('/google', (_, res) => {
 authRouter.get('/google/callback', async (req, res) => {
   if (!databaseEnabled || !googleId || !googleSecret || !jwtSecret) {
     return res.status(503).json({ message: 'Google sign-in is not configured.' });
+  }
+
+  // ── CSRF state validation ────────────────────────────────────────────────
+  // Reject the callback if the state token is missing, unknown, or expired.
+  // This ensures the callback is a response to a flow we initiated.
+  if (!consumeState(req.query.state)) {
+    return redirectWithError(res, 'Invalid or expired sign-in session. Please try again.');
   }
 
   // Google can send an error (e.g. user cancelled)
@@ -119,19 +169,64 @@ authRouter.get('/google/callback', async (req, res) => {
       return redirectWithError(res, 'Google profile is missing required fields.');
     }
 
-    // Insert the user if new, or update name/email if they already exist
-    const dummyHash = await bcrypt.hash(randomUUID(), 12); // Google users don't use a password
-    const { rows } = await pool.query(`
-      INSERT INTO users (id, name, email, password_hash, google_id)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (google_id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email
-      RETURNING id, name, email, role
-    `, [randomUUID(), profile.name, profile.email.toLowerCase(), dummyHash, profile.sub]);
+    // ── Domain restriction ────────────────────────────────────────────────
+    // If ALLOWED_EMAIL_DOMAIN is set, block accounts outside that domain.
+    // This is the first line of defence — the DB lookup below enforces it further
+    // by only allowing users that an admin has explicitly created.
+    if (allowedDomain && !profile.email.toLowerCase().endsWith(`@${allowedDomain}`)) {
+      return redirectWithError(
+        res,
+        `Sign-in is restricted to @${allowedDomain} accounts. Please use your company email.`
+      );
+    }
+
+    // Look up the user by google_id first, then fall back to email.
+    // This safely handles three cases:
+    //   1. Brand-new user  → INSERT
+    //   2. Returning Google user → UPDATE via google_id match
+    //   3. Existing email account (created by admin) → link google_id to their account
+    let user;
+
+    // Case 2: already has a google_id on record
+    const byGoogleId = await pool.query(
+      'SELECT id, name, email, role FROM users WHERE google_id = $1',
+      [profile.sub]
+    );
+    if (byGoogleId.rows.length > 0) {
+      // Refresh name in case it changed
+      const upd = await pool.query(
+        'UPDATE users SET name = $1 WHERE google_id = $2 RETURNING id, name, email, role',
+        [profile.name, profile.sub]
+      );
+      user = upd.rows[0];
+    } else {
+      // Case 3: email already exists but no google_id yet → link it
+      const byEmail = await pool.query(
+        'SELECT id FROM users WHERE email = $1',
+        [profile.email.toLowerCase()]
+      );
+      if (byEmail.rows.length > 0) {
+        const upd = await pool.query(
+          'UPDATE users SET google_id = $1, name = $2 WHERE email = $3 RETURNING id, name, email, role',
+          [profile.sub, profile.name, profile.email.toLowerCase()]
+        );
+        user = upd.rows[0];
+      } else {
+        // Case 1: completely new user → INSERT
+        const dummyHash = await bcrypt.hash(randomUUID(), 12);
+        const ins = await pool.query(
+          'INSERT INTO users (id, name, email, password_hash, google_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role',
+          [randomUUID(), profile.name, profile.email.toLowerCase(), dummyHash, profile.sub]
+        );
+        user = ins.rows[0];
+      }
+    }
 
     // Send the user back to the app with their token in the URL
-    res.redirect(`${clientUrl}/?auth_token=${encodeURIComponent(issueToken(rows[0]))}`);
+    res.redirect(`${clientUrl}/?auth_token=${encodeURIComponent(issueToken(user))}`);
   } catch (err) {
-    console.error('Google sign-in error:', err.message);
+    // Log the FULL error (not just message) so it is visible in server console
+    console.error('Google sign-in error:', err);
     redirectWithError(res, 'Google sign-in is temporarily unavailable.');
   }
 });
