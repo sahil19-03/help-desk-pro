@@ -68,9 +68,9 @@ function consumeState(state) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Creates a signed JWT containing the user's id and role. Expires in 8 hours. */
+/** Creates a signed JWT containing the user's id, role, name, and dept. Expires in 8 hours. */
 function issueToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: '8h' });
+  return jwt.sign({ sub: user.id, role: user.role, name: user.name, dept: user.dept }, jwtSecret, { expiresIn: '8h' });
 }
 
 /** Sends the user back to the frontend with an error message in the URL. */
@@ -181,44 +181,42 @@ authRouter.get('/google/callback', async (req, res) => {
     }
 
     // Look up the user by google_id first, then fall back to email.
-    // This safely handles three cases:
-    //   1. Brand-new user  → INSERT
-    //   2. Returning Google user → UPDATE via google_id match
-    //   3. Existing email account (created by admin) → link google_id to their account
+    // ⚠️  We do NOT auto-create accounts here. Only users that an admin has
+    //     explicitly added to the database are allowed to sign in.
     let user;
 
-    // Case 2: already has a google_id on record
+    // Case A: already linked — a returning Google user
     const byGoogleId = await pool.query(
-      'SELECT id, name, email, role FROM users WHERE google_id = $1',
+      'SELECT id, name, email, role, dept FROM users WHERE google_id = $1',
       [profile.sub]
     );
     if (byGoogleId.rows.length > 0) {
-      // Refresh name in case it changed
+      // Refresh display name in case it changed on Google's side
       const upd = await pool.query(
-        'UPDATE users SET name = $1 WHERE google_id = $2 RETURNING id, name, email, role',
+        'UPDATE users SET name = $1 WHERE google_id = $2 RETURNING id, name, email, role, dept',
         [profile.name, profile.sub]
       );
       user = upd.rows[0];
     } else {
-      // Case 3: email already exists but no google_id yet → link it
+      // Case B: email exists but not yet linked to a Google account
+      // (admin created the account manually before the user first signed in with Google)
       const byEmail = await pool.query(
         'SELECT id FROM users WHERE email = $1',
         [profile.email.toLowerCase()]
       );
       if (byEmail.rows.length > 0) {
+        // Link the Google account to the existing record
         const upd = await pool.query(
-          'UPDATE users SET google_id = $1, name = $2 WHERE email = $3 RETURNING id, name, email, role',
+          'UPDATE users SET google_id = $1, name = $2 WHERE email = $3 RETURNING id, name, email, role, dept',
           [profile.sub, profile.name, profile.email.toLowerCase()]
         );
         user = upd.rows[0];
       } else {
-        // Case 1: completely new user → INSERT
-        const dummyHash = await bcrypt.hash(randomUUID(), 12);
-        const ins = await pool.query(
-          'INSERT INTO users (id, name, email, password_hash, google_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role',
-          [randomUUID(), profile.name, profile.email.toLowerCase(), dummyHash, profile.sub]
+        // Case C: email is completely unknown — block access
+        return redirectWithError(
+          res,
+          `No account found for ${profile.email}. Please contact your IT admin to get access.`
         );
-        user = ins.rows[0];
       }
     }
 
@@ -253,13 +251,26 @@ authRouter.post('/login', async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      'SELECT id, name, email, role, password_hash FROM users WHERE email = $1',
+      'SELECT id, name, email, role, dept, password_hash, google_id FROM users WHERE email = $1',
       [email]
     );
     const user = rows[0];
 
-    // Don't reveal whether the email exists — just say "invalid credentials"
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    // User not found at all
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    // Check if password matches
+    const passwordValid = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordValid) {
+      // If this user signed in via Google, give them a helpful hint
+      if (user.google_id) {
+        return res.status(401).json({
+          message: 'This account uses Google sign-in. Please click "Continue with Google" to log in.',
+        });
+      }
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 

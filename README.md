@@ -2,77 +2,72 @@
 
 An internal IT help desk for a medium-sized company. Employees register technology incidents and service requests, while the platform routes each request to the best available support team.
 
-## Current milestone
+## Screenshots
 
-- Employee ticket registration
-- Category and priority capture
-- Automatic routing based on category and team availability
-- Live support-team capacity indicators
-- Ticket status and assignment visibility
+> **Note:** Add your actual app screenshots to a `docs/` folder and update these paths!
 
-The current API uses in-memory data so the workflow can be demonstrated quickly. PostgreSQL persistence, authentication, engineer actions, comments, SLA tracking, and reporting are the next milestones.
+![Login Screen](https://via.placeholder.com/800x450.png?text=Login+Screen)
+![Employee Dashboard](https://via.placeholder.com/800x450.png?text=Employee+Dashboard)
+![Engineer Queue](https://via.placeholder.com/800x450.png?text=Engineer+Queue)
 
-## PostgreSQL persistence
+## Architecture
 
-The API uses the in-memory workflow unless `DATABASE_URL` is configured. To enable ticket persistence:
+```mermaid
+graph TD
+    subgraph Frontend
+        React[React Client Vite]
+    end
 
-```powershell
-$env:DATABASE_URL = "postgresql://user:password@localhost:5432/helpdesk"
-$env:JWT_SECRET = "replace-with-a-long-local-secret"
-$env:GOOGLE_CLIENT_ID = "your-google-client-id"
-$env:GOOGLE_CLIENT_SECRET = "your-google-client-secret"
-$env:GOOGLE_CALLBACK_URL = "http://localhost:4000/api/auth/google/callback"
-$env:CLIENT_URL = "http://localhost:5173"
-psql $env:DATABASE_URL -f database/schema.sql
-psql $env:DATABASE_URL -f database/seed.sql
-psql $env:DATABASE_URL -f database/google-auth-migration.sql
-psql $env:DATABASE_URL -f database/admin-role-audit-migration.sql
-npm run dev:server
+    subgraph Backend
+        API[Express API Vercel Serverless]
+    end
+
+    subgraph External Services
+        DB[(PostgreSQL Database)]
+        Auth[Google OAuth 2.0]
+    end
+
+    React -->|REST / JWT| API
+    API -->|pg client| DB
+    API -.->|OAuth flow| Auth
+    React -.->|Redirect| Auth
 ```
 
-The demo seed user is for local development only. Its password is `development-only-password`. Set `JWT_SECRET` before using authentication:
+## Demo Credentials
 
-```powershell
-$env:JWT_SECRET = "replace-with-a-long-local-secret"
-```
+If you have run the database seed scripts during setup, you can log in with any seeded user's email (e.g., `aisha.sharma@company.com` for an employee, or `meera.pillai@helpdesk.internal` for an engineer). 
 
-Use `POST /api/auth/register` or `POST /api/auth/login` with JSON fields `name`, `email`, and `password` as appropriate. The login screen also includes Google sign-in; configure Google OAuth credentials before using that button. In database mode, send the returned token as `Authorization: Bearer <token>` when listing or creating tickets. Employees see their own tickets; engineers and admins see the full queue.
+- **Employee Password:** `Employee@123`
+- **Engineer Password:** `Engineer@123`
 
-To promote a specific account to admin:
-
-```powershell
+To promote a specific account to admin, you can run the promotion SQL script:
+```bash
 psql $env:DATABASE_URL -v admin_email="admin@company.com" -f database/promote-admin.sql
 ```
 
-Then sign in again so the token is re-issued with the updated role.
+## Local Setup & Development
 
-Admins can manage roles through the API:
-
-```http
-PATCH /api/admin/users/:id/role
-Authorization: Bearer <admin-token>
-Content-Type: application/json
-
-{
-	"role": "engineer",
-	"reason": "Moved to support operations"
-}
+### 1. Environment Variables
+Copy the server example `.env` file and fill in your details (Database connection string, Google OAuth credentials, etc.):
+```bash
+cp server/.env.example server/.env
 ```
 
-## Start
+### 2. Database Setup
+Ensure you have a PostgreSQL database running (either locally or a cloud provider like Supabase/Neon). Run the setup scripts from the root directory to build the schema and seed demo data:
+```bash
+node server/setup-db.js
+node server/seed-employees.js
+node server/seed-engineers.js
+```
 
-```powershell
+### 3. Start the Application
+Install all dependencies and start both the React frontend and Express backend concurrently:
+```bash
 npm install
 npm run dev
 ```
-
-Open `http://localhost:5173` after both services start.
-
-## Project structure
-
-- `client/` — React user interface
-- `server/` — Express API
-- `database/` — PostgreSQL database schema
+Open `http://localhost:5173` in your browser!
 
 ## Vercel Deployment
 
@@ -85,11 +80,15 @@ This project is configured as a monorepo (client + server) and can be deployed d
    - Build Command: `npm run build`
    - Output Directory: `client/dist`
    - Install Command: `npm install`
-5. Add your database environment variables (e.g., `DATABASE_URL`, `JWT_SECRET`) in the Environment Variables section.
+5. Add all your database and auth environment variables from `server/.env` in the Vercel Environment Variables section. **Make sure your `CLIENT_URL` and `GOOGLE_CALLBACK_URL` point to your live Vercel domain!**
 6. Click **Deploy**.
 
-Vercel will build the React frontend and automatically route any requests starting with `/api/` to your Express backend (thanks to the `vercel.json` and code configuration).
+Vercel will build the React frontend and automatically route any requests starting with `/api/` to your Express backend (thanks to the `vercel.json` configuration).
 
-## Product problem
+## Features
 
-HelpDesk Pro replaces scattered IT requests from email, chat, and informal conversations with a trackable workflow. It gives employees visibility into their request and gives IT managers a clear view of team capacity and unresolved work.
+- **Employee ticket registration:** Fast capture of category, priority, and descriptions.
+- **Automatic routing:** Intelligent routing based on category and current team availability.
+- **Support-team capacity:** Live indicators of how many engineers are available per team.
+- **Lifecycle visibility:** Clear ticket status and assignment tracking for both employees and engineers.
+- **Admin management:** Role-based access control and user management.

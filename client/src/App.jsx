@@ -16,7 +16,7 @@
  *   - Admin panel   (tab only visible to admins)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { apiFetch, decodeToken, getStoredUser } from './api.js';
 
 import LoginScreen  from './components/LoginScreen.jsx';
@@ -111,45 +111,74 @@ export default function App() {
     if (activeTab === 'admin') loadAdminTeams();
   }, [activeTab]);
 
-  // ── Auth actions ───────────────────────────────────────────────────────────
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileMenuRef = useRef(null);
 
-  /** Called when the login form is submitted. */
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // ── Auth actions ──────────────────────────────────────────────────────────
+
+  /** Called when user submits the email/password login form. */
   async function handleLogin(event) {
     event.preventDefault();
     setLoginError('');
     try {
-      const res    = await apiFetch('/auth/login', {
-        method:  'POST',
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(loginForm),
+        body: JSON.stringify(loginForm),
       });
-      const result = await res.json();
-
+      const data = await res.json();
       if (!res.ok) {
-        setLoginError(result.message ?? 'Unable to sign in. Check your email and password.');
+        setLoginError(data.message ?? 'Login failed. Please try again.');
         return;
       }
-
-      // Save token and update state so dashboard appears
-      localStorage.setItem('helpdesk-token', result.token);
-      setCurrentUser(decodeToken(result.token));
+      localStorage.setItem('helpdesk-token', data.token);
+      const user = decodeToken(data.token);
+      setCurrentUser(user);
       setNeedsLogin(false);
-      setLoginForm({ email: '', password: '' });
-      loadData();
     } catch {
       setLoginError('Cannot reach the server. Make sure the API is running.');
     }
   }
 
-  /** Clears the token and returns the user to the login screen. */
+  /** Clears the session and sends the user back to the login screen. */
   function handleLogout() {
     localStorage.removeItem('helpdesk-token');
     setCurrentUser(null);
-    setTickets([]);
     setNeedsLogin(true);
+    setProfileOpen(false);
+    setTickets([]);
+    setTeams([]);
   }
 
-  // ── Ticket actions ─────────────────────────────────────────────────────────
+  // ── Scroll‑spy – update activeTab based on which section is in view ──────────────────────
+  useEffect(() => {
+    const sections = {
+      overview: document.getElementById('overview'),
+      tickets: document.getElementById('tickets'),
+      teams: document.getElementById('teams'),
+      admin: document.getElementById('admin'),
+    };
+    const onScroll = () => {
+      const scrollY = window.scrollY + 100; // offset for header height
+      let newTab = 'overview';
+      for (const [key, el] of Object.entries(sections)) {
+        if (el && el.offsetTop <= scrollY) newTab = key;
+      }
+      setActiveTab(newTab);
+    };
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   /** Called when an employee submits the new-ticket form. */
   async function handleSubmitTicket(event) {
@@ -243,28 +272,37 @@ export default function App() {
         </div>
 
         <nav aria-label="Workspace navigation">
-          <a className={activeTab === 'overview' ? 'active' : ''} href="#overview" onClick={() => setActiveTab('overview')}>
-            Overview
-          </a>
-          <a className={activeTab === 'tickets' ? 'active' : ''} href="#tickets" onClick={() => setActiveTab('tickets')}>
-            {isEngineer ? 'Queue' : 'My tickets'} <span>{tickets.length}</span>
-          </a>
-          <a className={activeTab === 'teams' ? 'active' : ''} href="#teams" onClick={() => setActiveTab('teams')}>
-            Support teams
-          </a>
+          <a className={activeTab === 'overview' ? 'active' : ''} href="#overview" onClick={() => setActiveTab('overview')}>Overview</a>
+          <a className={activeTab === 'tickets' ? 'active' : ''} href="#tickets" onClick={() => setActiveTab('tickets')}> {isEngineer ? 'Queue' : 'My tickets'} <span>{tickets.length}</span></a>
+          <a className={activeTab === 'teams' ? 'active' : ''} href="#teams" onClick={() => setActiveTab('teams')}>Support teams</a>
           {isAdmin && (
-            <a className={activeTab === 'admin' ? 'active' : ''} href="#admin" onClick={() => setActiveTab('admin')}>
-              Admin <span className="admin-badge">⚙</span>
-            </a>
+            <a className={activeTab === 'admin' ? 'active' : ''} href="#admin" onClick={() => setActiveTab('admin')}>Admin <span className="admin-badge">⚙</span></a>
           )}
         </nav>
 
         <div className="header-actions">
           <span className="portal"><i /> {roleLabel}</span>
-          {/* Profile circle shows initials — click to sign out */}
-          <button className="profile" onClick={handleLogout} title="Click to sign out">
-            {initials}
-          </button>
+          {/* Profile dropdown – first letter avatar + logout */}
+          <div className={`profile-menu ${profileOpen ? 'open' : ''}`} ref={profileMenuRef}>
+            <button className="profile" onClick={() => setProfileOpen(o => !o)} title={currentUser?.name ?? 'Profile'}>
+              {(currentUser?.name?.[0] ?? currentUser?.email?.[0] ?? 'U').toUpperCase()}
+            </button>
+            <div className="dropdown">
+              <div className="dropdown-user-info">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#28634e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink: 0}}>
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                <div className="dropdown-details">
+                  <span className="dropdown-name">{currentUser?.name ?? 'User'}</span>
+                  <span className="dropdown-role">{currentUser?.email} • <span style={{textTransform:'capitalize'}}>{currentUser?.dept || currentUser?.role}</span></span>
+                </div>
+              </div>
+              <button className="logout-btn" onClick={handleLogout}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:'5px',verticalAlign:'middle'}}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign out
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -367,9 +405,11 @@ export default function App() {
         </div>
       </section>
 
-      {/* ── Admin panel (only visible on the Admin tab) ── */}
-      {isAdmin && activeTab === 'admin' && (
-        <AdminPanel adminTeams={adminTeams} onRefresh={loadAdminTeams} />
+      {/* ── Admin panel (always visible to admins, scrolled to via #admin) ── */}
+      {isAdmin && (
+        <section id="admin">
+          <AdminPanel adminTeams={adminTeams} onRefresh={loadAdminTeams} />
+        </section>
       )}
 
       {/* ── Assign ticket modal (opens when admin clicks Assign) ── */}
