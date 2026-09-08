@@ -87,9 +87,13 @@ export default function App() {
 
   // Run on first render: handle Google OAuth redirect, then load data
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const googleToken = params.get('auth_token'); // Google sent us a token
-    const googleError = params.get('auth_error'); // Google sent us an error
+    // Read from URL hash (#auth_token=... or #auth_error=...)
+    // Using the hash avoids Chrome Safe Browsing flags — hash fragments are
+    // never sent to servers, never logged, and won't be flagged as phishing.
+    const hash = window.location.hash.slice(1); // strip leading '#'
+    const params = new URLSearchParams(hash);
+    const googleToken = params.get('auth_token');
+    const googleError = params.get('auth_error');
 
     if (googleToken) {
       // Store the token and mark user as logged in

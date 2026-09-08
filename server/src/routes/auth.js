@@ -73,9 +73,9 @@ function issueToken(user) {
   return jwt.sign({ sub: user.id, role: user.role, name: user.name, dept: user.dept }, jwtSecret, { expiresIn: '8h' });
 }
 
-/** Sends the user back to the frontend with an error message in the URL. */
+/** Sends the user back to the frontend with an error message in the URL hash. */
 function redirectWithError(res, message) {
-  res.redirect(`${clientUrl}/?${new URLSearchParams({ auth_error: message })}`);
+  res.redirect(`${clientUrl}/#${new URLSearchParams({ auth_error: message })}`);
 }
 
 // ── Debug endpoint (development only) ────────────────────────────────────────
@@ -220,8 +220,10 @@ authRouter.get('/google/callback', async (req, res) => {
       }
     }
 
-    // Send the user back to the app with their token in the URL
-    res.redirect(`${clientUrl}/?auth_token=${encodeURIComponent(issueToken(user))}`);
+    // Send the user back to the app with their token in the URL hash.
+    // Using the fragment (#) instead of query params (?): hash fragments are
+    // never sent to servers or logged, avoiding Chrome Safe Browsing flags.
+    res.redirect(`${clientUrl}/#auth_token=${encodeURIComponent(issueToken(user))}`);
   } catch (err) {
     // Log the FULL error (not just message) so it is visible in server console
     console.error('Google sign-in error:', err);
