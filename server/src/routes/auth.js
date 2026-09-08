@@ -73,9 +73,10 @@ function issueToken(user) {
   return jwt.sign({ sub: user.id, role: user.role, name: user.name, dept: user.dept }, jwtSecret, { expiresIn: '8h' });
 }
 
-/** Sends the user back to the frontend with an error message in the URL hash. */
+/** Sends the user back to the frontend with a plain-text error in the query string.
+ *  This is safe — it's just a human-readable message, not a credential. */
 function redirectWithError(res, message) {
-  res.redirect(`${clientUrl}/#${new URLSearchParams({ auth_error: message })}`);
+  res.redirect(`${clientUrl}/?${new URLSearchParams({ auth_error: message })}`);
 }
 
 // ── Debug endpoint (development only) ────────────────────────────────────────
@@ -220,10 +221,22 @@ authRouter.get('/google/callback', async (req, res) => {
       }
     }
 
-    // Send the user back to the app with their token in the URL hash.
-    // Using the fragment (#) instead of query params (?): hash fragments are
-    // never sent to servers or logged, avoiding Chrome Safe Browsing flags.
-    res.redirect(`${clientUrl}/#auth_token=${encodeURIComponent(issueToken(user))}`);
+    // ── Secure cookie handoff ─────────────────────────────────────────────
+    // Store the JWT in a short-lived HttpOnly cookie instead of the URL.
+    // This means NO token ever appears in any URL — the #1 cause of
+    // Chrome Safe Browsing "Dangerous site" flags on OAuth flows.
+    //
+    // The frontend calls GET /api/auth/session immediately on load,
+    // which returns the token and deletes the cookie (one-time use).
+    const isSecure = clientUrl.startsWith('https');
+    res.cookie('oauth_handoff', issueToken(user), {
+      httpOnly: true,              // JS cannot read this cookie
+      secure:   isSecure,         // HTTPS only in production
+      sameSite: 'lax',            // safe for OAuth redirect flows
+      maxAge:   5 * 60 * 1000,   // expires in 5 minutes (one page load is enough)
+      path:     '/',
+    });
+    res.redirect(clientUrl);      // clean redirect — no token in the URL
   } catch (err) {
     // Log the FULL error (not just message) so it is visible in server console
     console.error('Google sign-in error:', err);
@@ -287,4 +300,29 @@ authRouter.post('/login', async (req, res) => {
     console.error('Login error:', err.message);
     res.status(503).json({ message: 'Authentication service is temporarily unavailable.' });
   }
+});
+
+// ── OAuth session pickup ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/auth/session
+ *
+ * Called by the frontend immediately on page load.
+ * If a pending OAuth handoff cookie exists (set after Google sign-in),
+ * this returns the JWT token and immediately deletes the cookie (one-time use).
+ *
+ * This is how we pass the token without ever putting it in a URL —
+ * no query params, no hash fragments, nothing for Safe Browsing to flag.
+ *
+ * Returns:
+ *   200 { token }  — if a valid handoff cookie was present
+ *   204            — if no pending session (normal page load, already logged in)
+ */
+authRouter.get('/session', (req, res) => {
+  const token = req.cookies?.oauth_handoff;
+  if (!token) return res.status(204).end(); // normal load — nothing to do
+
+  // Immediately delete the cookie so it can only be used once
+  res.clearCookie('oauth_handoff', { path: '/' });
+  res.json({ token });
 });

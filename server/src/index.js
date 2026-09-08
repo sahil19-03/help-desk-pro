@@ -2,8 +2,9 @@
 // Business logic lives in routes/ and middleware/ — keep this file thin.
 
 import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
+import express    from 'express';
+import cors       from 'cors';
+import cookieParser from 'cookie-parser';
 
 import { pool, databaseEnabled } from './db.js';
 import { authRouter }    from './routes/auth.js';
@@ -43,6 +44,7 @@ app.use(cors(isProduction
 ));
 
 app.use(express.json());
+app.use(cookieParser()); // needed to read the OAuth handoff cookie
 
 // ─── Health checks ────────────────────────────────────────────────────────────
 app.get('/',           (_, res) => res.json({ name: 'Help Desk API', status: 'ok' }));

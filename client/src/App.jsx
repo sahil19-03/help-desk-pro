@@ -85,29 +85,43 @@ export default function App() {
     } catch { /* silent — admin panel will show empty state */ }
   }
 
-  // Run on first render: handle Google OAuth redirect, then load data
+  // Run on first render: handle Google OAuth redirect, then load data.
+  //
+  // HOW THE SECURE HANDOFF WORKS:
+  //   1. User clicks "Continue with Google" → browser goes to /api/auth/google
+  //   2. Google authenticates them and redirects back to /api/auth/google/callback
+  //   3. Server validates everything, then sets a short-lived HttpOnly cookie
+  //      ("oauth_handoff") and redirects the user to the app root — NO token in the URL
+  //   4. This useEffect calls GET /api/auth/session which reads the cookie,
+  //      returns the token, and deletes the cookie immediately (one-time use)
+  //   5. Token is stored in localStorage and user is logged in
+  //
+  // Result: the JWT never appears in any URL, so Chrome Safe Browsing cannot flag it.
   useEffect(() => {
-    // Read from URL hash (#auth_token=... or #auth_error=...)
-    // Using the hash avoids Chrome Safe Browsing flags — hash fragments are
-    // never sent to servers, never logged, and won't be flagged as phishing.
-    const hash = window.location.hash.slice(1); // strip leading '#'
-    const params = new URLSearchParams(hash);
-    const googleToken = params.get('auth_token');
-    const googleError = params.get('auth_error');
-
-    if (googleToken) {
-      // Store the token and mark user as logged in
-      localStorage.setItem('helpdesk-token', googleToken);
-      setCurrentUser(decodeToken(googleToken));
-      setNeedsLogin(false);
-      window.history.replaceState({}, '', window.location.pathname); // clean the URL
-    } else if (googleError) {
+    // Check for a plain-text error message from a failed OAuth flow (safe — no credentials)
+    const params   = new URLSearchParams(window.location.search);
+    const oauthErr = params.get('auth_error');
+    if (oauthErr) {
       setNeedsLogin(true);
-      setLoginError(googleError);
+      setLoginError(oauthErr);
       window.history.replaceState({}, '', window.location.pathname);
     }
 
-    loadData();
+    // Try to pick up an OAuth handoff token from the server cookie
+    fetch('/api/auth/session', { credentials: 'include' })
+      .then(res => (res.status === 200 ? res.json() : null))
+      .then(data => {
+        if (data?.token) {
+          localStorage.setItem('helpdesk-token', data.token);
+          const user = decodeToken(data.token);
+          setCurrentUser(user);
+          setNeedsLogin(false);
+          // Clean URL in case any params were left
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      })
+      .catch(() => { /* session endpoint unavailable — proceed without */ })
+      .finally(() => loadData());
   }, []);
 
   // Load engineer roster whenever admin switches to the Admin tab
