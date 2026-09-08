@@ -127,7 +127,7 @@ export default function App() {
   // ── Auth actions ──────────────────────────────────────────────────────────
 
   /** Called when user submits the email/password login form. */
-  async function handleLogin(event) {
+  async function handleLogin(event, mode = 'employee') {
     event.preventDefault();
     setLoginError('');
     try {
@@ -141,8 +141,22 @@ export default function App() {
         setLoginError(data.message ?? 'Login failed. Please try again.');
         return;
       }
-      localStorage.setItem('helpdesk-token', data.token);
       const user = decodeToken(data.token);
+
+      // Validate that the user signed in on the correct tab
+      const isEngineerOrAdmin = user?.role === 'engineer' || user?.role === 'admin';
+      if (mode === 'engineer' && !isEngineerOrAdmin) {
+        // Employee trying to use the Engineer tab
+        setLoginError('This is an employee account. Please use the Employee tab to sign in.');
+        return;
+      }
+      if (mode === 'employee' && isEngineerOrAdmin) {
+        // Engineer/admin trying to use the Employee tab
+        setLoginError('This is an engineer/admin account. Please use the Engineer tab to sign in.');
+        return;
+      }
+
+      localStorage.setItem('helpdesk-token', data.token);
       setCurrentUser(user);
       setNeedsLogin(false);
     } catch {

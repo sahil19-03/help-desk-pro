@@ -15,15 +15,175 @@ main { max-width: 1160px; margin: auto; padding: 0 28px 48px; }
 .google-button:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 .google-mark { color: #4285f4; font: 700 17px Arial, sans-serif; }
 
-.auth-divider { display: flex; align-items: center; gap: 10px; margin: 30px 0 24px; color: #9aaa9e; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+.auth-divider { display: flex; align-items: center; gap: 10px; margin: 22px 0 18px; color: #9aaa9e; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
 .auth-divider::before, .auth-divider::after { flex: 1; height: 1px; background: #e4ece4; content: ''; }
+
+/* ── Login mode toggle ── */
+.login-mode-toggle {
+  position: relative;
+  display: flex;
+  background: #f0f4f0;
+  border-radius: 8px;
+  padding: 4px;
+  gap: 2px;
+  margin-bottom: 24px;
+}
+.mode-tab {
+  position: relative;
+  z-index: 1;
+  flex: 1 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto !important;      /* override global button { width:100% } */
+  margin: 0 !important;        /* override global button { margin-top:21px } */
+  padding: 9px 12px !important;
+  border: none;
+  border-radius: 6px !important;
+  background: transparent !important;  /* no dark bg from global button */
+  color: #6d7971 !important;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  box-shadow: none !important;
+  transform: none !important;
+  letter-spacing: normal;
+}
+.mode-tab:hover { background: transparent !important; color: #28634e !important; box-shadow: none !important; transform: none !important; }
+.mode-tab.active { color: #173f32 !important; }
+.mode-tab.active.engineer { color: #1a3a6b !important; }
+/* Sliding pill behind the active tab */
+.mode-indicator {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  height: calc(100% - 8px);
+  background: #fff;
+  border-radius: 5px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  transition: transform 0.22s cubic-bezier(.4,0,.2,1);
+  pointer-events: none;
+}
+.mode-indicator.right { transform: translateX(calc(100% + 2px)); }
+
+/* Admin-only lock badge */
+.admin-login-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  margin-bottom: 6px;
+  background: #fff8f0;
+  border: 1px solid #f0d0a8;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Engineer tab — blue-tinted Google button border */
+.google-button-engineer { border-color: #c5d0f0; }
+.google-button-engineer:hover { border-color: #8fa8e8; }
+
+/* Engineer error message */
+.message-engineer { border-left-color: #4a7fd4; background: #f0f5ff; color: #1a3a6b; }
 
 .auth-panel form { border: none; background: transparent; padding: 0; margin: 0; }
 .auth-panel label { font-size: 13px; color: #314238; }
 .auth-panel input { padding: 13px 14px; border-radius: 6px; font-size: 14px; margin-top: 8px; }
-.auth-panel button[type="submit"] { padding: 14px 16px; border-radius: 8px; font-size: 15px; letter-spacing: .02em; transition: all 0.2s ease; margin-top: 28px; }
-.auth-panel button[type="submit"]:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(40,99,78,0.25); }
-.auth-panel button[type="submit"]:active { transform: translateY(0); box-shadow: 0 2px 8px rgba(40,99,78,0.15); }
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
+}
+.password-input-wrapper input {
+  margin-top: 0 !important;
+  padding-right: 44px !important;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px !important;
+  height: 32px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: #839188 !important;
+  cursor: pointer;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none !important;
+  transition: color 0.18s ease, background 0.18s ease;
+  z-index: 2;
+}
+.password-toggle-btn:hover {
+  background: #eef3ee !important;
+  color: #173f32 !important;
+  box-shadow: none !important;
+  transform: translateY(-50%) !important;
+}
+.password-toggle-btn:active {
+  transform: translateY(-50%) scale(0.95) !important;
+}
+.signin-submit-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 28px;
+  padding: 15px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #d9f17c;
+  background: linear-gradient(135deg, #173f32 0%, #28634e 100%);
+  box-shadow: 0 4px 14px rgba(23, 63, 50, 0.25);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.signin-submit-btn span {
+  float: none !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+.signin-submit-btn svg {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.signin-submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(23, 63, 50, 0.35);
+  background: linear-gradient(135deg, #1a4a3b 0%, #2e755a 100%);
+}
+.signin-submit-btn:hover svg {
+  transform: translateX(3px);
+}
+.signin-submit-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(23, 63, 50, 0.2);
+}
+.signin-submit-btn.engineer-btn {
+  color: #fff;
+  background: linear-gradient(135deg, #1a3a6b 0%, #2a5ea8 100%);
+  box-shadow: 0 4px 14px rgba(26, 58, 107, 0.25);
+}
+.signin-submit-btn.engineer-btn:hover {
+  background: linear-gradient(135deg, #1e447d 0%, #326ec2 100%);
+  box-shadow: 0 8px 22px rgba(26, 58, 107, 0.35);
+}
 header { height: 82px; display: flex; align-items: center; gap: 30px; }
 .brand { display: flex; align-items: center; gap: 11px; font: 700 19px 'Space Grotesk', sans-serif; }
 .logo { display: grid; place-items: center; width: 35px; height: 35px; background: #173f32; color: #d9f17c; border-radius: 10px; }

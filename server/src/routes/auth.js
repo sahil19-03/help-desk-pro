@@ -261,16 +261,20 @@ authRouter.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    // Check if password matches
+    // Check if password matches.
+    // Note: admin accounts always have a password_hash set, so they can always sign in
+    // with email+password even if their Google account is also linked.
+    // Only pure Google-only accounts (no password_hash) get the Google hint.
+    if (!user.password_hash) {
+      // Account has no password — must use Google
+      return res.status(401).json({
+        message: 'This account uses Google sign-in. Please use the Employee tab and click "Continue with Google" to log in.',
+      });
+    }
+
     const passwordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordValid) {
-      // If this user signed in via Google, give them a helpful hint
-      if (user.google_id) {
-        return res.status(401).json({
-          message: 'This account uses Google sign-in. Please click "Continue with Google" to log in.',
-        });
-      }
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 

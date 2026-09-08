@@ -7,10 +7,11 @@ import { apiFetch } from '../api.js';
 const initialForm = { name: '', email: '', password: '', role: 'employee' };
 
 export default function AddEmployeeModal({ onCreated, onClose }) {
-  const [form,    setForm]    = useState(initialForm);
-  const [error,   setError]   = useState('');
-  const [success, setSuccess] = useState('');
-  const [busy,    setBusy]    = useState(false);
+  const [form,         setForm]         = useState(initialForm);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error,        setError]        = useState('');
+  const [success,      setSuccess]      = useState('');
+  const [busy,         setBusy]         = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -84,15 +85,52 @@ export default function AddEmployeeModal({ onCreated, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <label style={{ fontSize: 12, fontWeight: 700, color: '#46534b' }}>
               Temporary password
-              <input
-                required
-                type="password"
-                value={form.password}
-                placeholder="Min 8 characters"
-                minLength={8}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                style={{ display: 'block', width: '100%', marginTop: 6, padding: '10px 12px', border: '1px solid #ccd8cf', borderRadius: 3, fontSize: 13, fontFamily: 'inherit' }}
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginTop: 6 }}>
+                <input
+                  required
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  placeholder="Min 8 chars"
+                  minLength={8}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  style={{ display: 'block', width: '100%', margin: 0, padding: '10px 36px 10px 12px', border: '1px solid #ccd8cf', borderRadius: 3, fontSize: 13, fontFamily: 'inherit' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  style={{
+                    position: 'absolute',
+                    right: 6,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 'auto',
+                    margin: 0,
+                    padding: 4,
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#839188',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: 'none'
+                  }}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex="-1"
+                >
+                  {showPassword ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </label>
 
             <label style={{ fontSize: 12, fontWeight: 700, color: '#46534b' }}>
