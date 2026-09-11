@@ -2,7 +2,7 @@
   "version": 2,
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace=client",
-  "outputDirectory": "dist",
+  "outputDirectory": "client/dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
