@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "npm install",
-  "buildCommand": "npm run build --workspace=client",
+  "buildCommand": "npm run --prefix client build",
   "outputDirectory": "client/dist",
   "rewrites": [
     {
