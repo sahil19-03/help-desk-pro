@@ -6,7 +6,8 @@ export default defineConfig({
   plugins: [react()],
 
   build: {
-    outDir: 'dist', // outputs to client/dist (CWD = client/ on Vercel)
+    outDir: '../dist',    // outputs to project-root/dist — matches vercel.json outputDirectory: "dist"
+    emptyOutDir: true,    // silence Vite's out-of-root warning and clean before build
   },
 
   // In local dev, proxy /api/* to the Express server so fetch('/api/...')
