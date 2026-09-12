@@ -5,6 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
 
+  build: {
+    outDir: 'dist', // outputs to client/dist (CWD = client/ on Vercel)
+  },
+
   // In local dev, proxy /api/* to the Express server so fetch('/api/...')
   // works without CORS issues and without needing VITE_API_URL.
   server: {
